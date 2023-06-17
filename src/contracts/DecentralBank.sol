@@ -13,6 +13,7 @@ contract DecentralBank {
     constructor(RWD _rwd, Tether _tether) public {
         rwd = _rwd;
         tether = _tether;
+        owner = msg.sender;
     }
     // staking function
     function depositTokens(uint _amount) public {
@@ -28,6 +29,18 @@ contract DecentralBank {
         // update Staking Balance
         isStaking[msg.sender] = true;
         hasStaked[msg.sender] = true;
+    }
+    // unstake tokens
+    function unstakeTokens() public {
+        uint balance = stakingBalance[msg.sender];
+        // require the amount to be greater than zero
+        require(balance > 0, 'staking balance cannot be less than zero');
+        // transfer the tokens to the specified contract address from our bank
+        tether.transfer(msg.sender, balance);
+        // reset staking balance
+        stakingBalance[msg.sender] = 0;
+        // Update Staking Status
+        isStaking[msg.sender] = false;
     }
     // issue rewards
     function issueTokens() public {
