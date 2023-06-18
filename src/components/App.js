@@ -12,7 +12,27 @@ const App = () => {
     rwdBalance: "0",
     stakingBalance: "0",
     accountList: "0x0",
+    loading: true,
   });
+  const [objectTime, setObjectTime] = React.useState({
+    time: {},
+    seconds: 20,
+  });
+  let timer = 0;
+  const handleSecondsToTime = (secs) => {
+    let hours, seconds, minutes;
+    hours = Math.floor(secs / (60 * 60));
+    let devisor_for_minutes = secs % (60 * 60);
+    minutes = Math.floor(devisor_for_minutes / 60);
+    let devisor_for_seconds = devisor_for_minutes % 60;
+    seconds = Math.ceil(devisor_for_seconds);
+    let obj = {
+      h: hours,
+      m: minutes,
+      s: seconds,
+    };
+    return obj;
+  };
   const handleCheckWeb3 = async () => {
     if (window.ethereum) {
       window.web3 = new Web3(window.ethereum);
@@ -29,71 +49,132 @@ const App = () => {
     const accountList = await web3.eth.getAccounts();
     const networkID = await web3.eth.net.getId();
     const tetherData = Tether.networks[networkID];
+    const rwdData = RWD.networks[networkID];
+    const decentralBankData = DecentralBank.networks[networkID];
     // metamask ở GANACHE thì mới lấy được networkID
-    if (tetherData) {
+    if (tetherData && rwdData && decentralBankData) {
       const tether = new web3.eth.Contract(Tether.abi, tetherData.address);
+      const rwd = new web3.eth.Contract(RWD.abi, rwdData.address);
+      const decentralBank = new web3.eth.Contract(
+        DecentralBank.abi,
+        decentralBankData.address
+      );
       let tetherBalance = await tether.methods.balanceOf(accountList[0]).call();
-      console.log(tetherBalance);
+      let rwdBalance = await rwd.methods.balanceOf(accountList[0]).call();
+      let stakingBalance = await decentralBank.methods
+        .stakingBalance(accountList[0])
+        .call();
       setObjectInformation({
         ...objectInformation,
         tether,
-        tetherBalance: tetherBalance.toString(),
+        rwd,
+        decentralBank,
+        stakingBalance: web3.utils.fromWei(stakingBalance.toString(), "Ether"),
+        rwdBalance: web3.utils.fromWei(rwdBalance.toString(), "Ether"),
+        tetherBalance: web3.utils.fromWei(tetherBalance.toString(), "Ether"),
         accountList,
+        loading: false,
       });
     } else {
       window.alert(
         "Error! Tether contract not deployed - no detected network!"
       );
     }
-    const rwdData = RWD.networks[networkID];
-    // metamask ở GANACHE thì mới lấy được networkID
-    if (rwdData) {
-      const rwd = new web3.eth.Contract(RWD.abi, rwdData.address);
-      let rwdBalance = await rwd.methods.balanceOf(accountList[0]).call();
-      console.log(rwdBalance);
-      setObjectInformation({
-        ...objectInformation,
-        rwd,
-        tetherBalance: rwdBalance.toString(),
-        accountList,
+  };
+  const handleUnstakingFunction = () => {
+    const { decentralBankData, accountList: from } = objectInformation;
+    setObjectInformation({
+      ...objectInformation,
+      loading: true,
+    });
+    decentralBankData.methods
+      .unstakeTokens()
+      .send({
+        from,
+      })
+      .on("transactionHash", (hash) => {
+        setObjectInformation({
+          ...objectInformation,
+          loading: false,
+        });
       });
-    } else {
-      window.alert("Error! RWD contract not deployed - no detected network!");
-    }
-    const decentralBankData = DecentralBank.networks[networkID];
-    // metamask ở GANACHE thì mới lấy được networkID
-    if (rwdData) {
-      const decentralBank = new web3.eth.Contract(
-        DecentralBank.abi,
-        decentralBankData.address
-      );
-      let stakingBalance = await decentralBank.methods
-        .stakingBalance(accountList[0])
-        .call();
-      console.log(stakingBalance);
-      setObjectInformation({
-        ...objectInformation,
-        decentralBank,
-        stakingBalance: stakingBalance.toString(),
-        accountList,
+  };
+  const handleStakeTokens = (amount) => {
+    const { decentralBankData, accountList: from, tether } = objectInformation;
+    setObjectInformation({
+      ...objectInformation,
+      loading: true,
+    });
+    tether.methods
+      .approve(decentralBankData._address, amount)
+      .send({
+        from,
+      })
+      .on("transactionHash", (hash) => {
+        decentralBankData.methods
+          .depositTokens(amount)
+          .send({
+            from,
+          })
+          .on("transactionHash", (hash) => {
+            setObjectInformation({
+              ...objectInformation,
+              loading: false,
+            });
+          });
       });
-    } else {
-      window.alert(
-        "Error! Decentral Bank contract not deployed - no detected network!"
-      );
+  };
+  const handleTime = () => {
+    let time = handleSecondsToTime(objectTime.seconds);
+    setObjectTime({ ...objectTime, time });
+  };
+  const handleCountDown = () => {
+    // 1. countdown one second at a time
+    let seconds = objectTime.seconds - 1;
+    setObjectTime({
+      ...objectTime,
+      time: handleSecondsToTime(seconds),
+      seconds,
+    });
+    // 2. stop counting when we hit zero
+    if (seconds === 0) {
+      clearInterval(timer);
     }
   };
-  const handleLoad = async () => {
-    await handleCheckWeb3();
+  const handleStartTimer = () => {
+    if (timer === 0 && objectTime.seconds > 0) {
+      timer = setInterval(handleCountDown, 1000);
+    }
+  };
+  const handleAirdropReleaseTokens = () => {
+    let stakingB = objectInformation.stakingBalance;
+    if (stakingB >= "500000000000000000") {
+      handleStartTimer();
+    }
   };
   React.useEffect(() => {
-    handleLoad();
+    handleCheckWeb3();
+    handleTime();
   }, []);
-  return (
+  console.log(objectInformation);
+  return objectInformation.loading ? (
+    <h1>Loading...</h1>
+  ) : (
     <>
       <p>
         Address <strong>{objectInformation.accountList}</strong>
       </p>
+      <p>
+        Staking Balance: <strong>{objectInformation.stakingBalance}</strong>
+      </p>
+      <p>
+        RWD Balance: <strong>{objectInformation.rwdBalance}</strong>
+      </p>
+      <p>
+        Balance: <strong>{objectInformation.tetherBalance}</strong>
+      </p>
+      <button onClick={handleUnstakingFunction}>WithDraw</button>
+      <p>{`${objectTime.time.m}:${objectTime.time.s} ${handleStartTimer()}`}</p>
     </>
   );
 };
