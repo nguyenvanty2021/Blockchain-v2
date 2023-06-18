@@ -11,7 +11,6 @@ const App = () => {
     tetherBalance: "0",
     rwdBalance: "0",
     stakingBalance: "0",
-    loading: true,
     accountList: "0x0",
   });
   const handleCheckWeb3 = async () => {
@@ -44,6 +43,43 @@ const App = () => {
     } else {
       window.alert(
         "Error! Tether contract not deployed - no detected network!"
+      );
+    }
+    const rwdData = RWD.networks[networkID];
+    // metamask ở GANACHE thì mới lấy được networkID
+    if (rwdData) {
+      const rwd = new web3.eth.Contract(RWD.abi, rwdData.address);
+      let rwdBalance = await rwd.methods.balanceOf(accountList[0]).call();
+      console.log(rwdBalance);
+      setObjectInformation({
+        ...objectInformation,
+        rwd,
+        tetherBalance: rwdBalance.toString(),
+        accountList,
+      });
+    } else {
+      window.alert("Error! RWD contract not deployed - no detected network!");
+    }
+    const decentralBankData = DecentralBank.networks[networkID];
+    // metamask ở GANACHE thì mới lấy được networkID
+    if (rwdData) {
+      const decentralBank = new web3.eth.Contract(
+        DecentralBank.abi,
+        decentralBankData.address
+      );
+      let stakingBalance = await decentralBank.methods
+        .stakingBalance(accountList[0])
+        .call();
+      console.log(stakingBalance);
+      setObjectInformation({
+        ...objectInformation,
+        decentralBank,
+        stakingBalance: stakingBalance.toString(),
+        accountList,
+      });
+    } else {
+      window.alert(
+        "Error! Decentral Bank contract not deployed - no detected network!"
       );
     }
   };
